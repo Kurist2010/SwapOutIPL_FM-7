@@ -1,5 +1,5 @@
 SwapOutIPL 
-FM77AVシリーズでFDで起動時のブートローダーにBASICモード、DOSモードそれぞれでDISK BIOSを置き換えるIPLです。
+FM77AVシリーズでFD起動時のブートローダーにBASICモード、DOSモードそれぞれでDISK BIOSを置き換えるIPLです。
 D77ファイルにて構築が前提です。
 
 使用例
