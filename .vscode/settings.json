@@ -1,0 +1,10 @@
+{
+  "files.encoding": "shiftjis",
+  "files.autoGuessEncoding": false,
+  "files.associations": {
+    "*.s": "asm6x09",
+    "*.asm": "asm6x09",
+    "*.defs": "asm6x09",
+    "*.d": "asm6x09"
+  }
+}

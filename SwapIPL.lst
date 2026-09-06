@@ -1,0 +1,129 @@
+                      (PL_FM-7\SwapIPL.s):00001         ; ===========================================================================
+                      (PL_FM-7\SwapIPL.s):00002         ;  FM77AV  SwapIPL(FM-NEW7のNewBOOT ROMに差し替えることが目的)
+                      (PL_FM-7\SwapIPL.s):00003         ; ===========================================================================
+                      (PL_FM-7\SwapIPL.s):00004         
+                      (PL_FM-7\SwapIPL.s):00005         ; ---------------------------------------------------------------------------
+                      (PL_FM-7\SwapIPL.s):00006         ; BIOSエントリ
+                      (PL_FM-7\SwapIPL.s):00007         ; ---------------------------------------------------------------------------
+     FE00             (PL_FM-7\SwapIPL.s):00008         BOOT_ENTRY      equ     $FE00                   ; ブートエントリー
+     FE02             (PL_FM-7\SwapIPL.s):00009         DISK_RESTORE    equ     $FE02                   ; シークトラック0 (未使用)
+     FE05             (PL_FM-7\SwapIPL.s):00010         DISK_WRITE      equ     $FE05                   ; セクタライト (未使用)
+     FE08             (PL_FM-7\SwapIPL.s):00011         DISK_READ       equ     $FE08                   ; セクタリード
+                      (PL_FM-7\SwapIPL.s):00012         
+                      (PL_FM-7\SwapIPL.s):00013         ; ---------------------------------------------------------------------------
+                      (PL_FM-7\SwapIPL.s):00014         ; I/Oエントリ
+                      (PL_FM-7\SwapIPL.s):00015         ; ---------------------------------------------------------------------------
+     FD0B             (PL_FM-7\SwapIPL.s):00016         BOOT_SEL_STAT   equ     $FD0B                   ; ブート選択スイッチステータス
+                      (PL_FM-7\SwapIPL.s):00017                                                         ;   bit0: 0=BASIC / 1=DOS
+     FD93             (PL_FM-7\SwapIPL.s):00018         MODE_SEL_REG1   equ     $FD93                   ; モードセレクトレジスタ1
+                      (PL_FM-7\SwapIPL.s):00019                                                         ;   bit0: ブートRAM
+                      (PL_FM-7\SwapIPL.s):00020                                                         ;     0=書込禁止 / 1=書込許可
+     6000             (PL_FM-7\SwapIPL.s):00021         MOVE_IPL        equ     $6000                   ; IPL移動先
+     6200             (PL_FM-7\SwapIPL.s):00022         BODY_DST        equ     $6200                   ; 追加セクタ読込先
+                      (PL_FM-7\SwapIPL.s):00023         
+                      (PL_FM-7\SwapIPL.s):00024         ; ===========================================================================
+                      (PL_FM-7\SwapIPL.s):00025                         org     $0000                   ; ロード先アドレス($0100/$0300)に
+                      (PL_FM-7\SwapIPL.s):00026                                                         ; よらない相対配置で書く
+0000                  (PL_FM-7\SwapIPL.s):00027         START
+                      (PL_FM-7\SwapIPL.s):00028         ; ---------------------------------------------------------------------------
+                      (PL_FM-7\SwapIPL.s):00029         ; 1. 自分自身を$6000へコピー
+                      (PL_FM-7\SwapIPL.s):00030         ; ---------------------------------------------------------------------------
+0000                  (PL_FM-7\SwapIPL.s):00031         do_copy
+0000 5F               (PL_FM-7\SwapIPL.s):00032                         clrb                            ; 256バイト転送
+0001 308CFC           (PL_FM-7\SwapIPL.s):00033                         leax    START,pcr               ; X = 自分の実ロードアドレス($100か$300)
+0004 108E6000         (PL_FM-7\SwapIPL.s):00034                         ldy     #MOVE_IPL               ; 転送先
+0008                  (PL_FM-7\SwapIPL.s):00035         copy_loop
+0008 A680             (PL_FM-7\SwapIPL.s):00036                         lda     ,x+
+000A A7A0             (PL_FM-7\SwapIPL.s):00037                         sta     ,y+
+000C 5A               (PL_FM-7\SwapIPL.s):00038                         decb
+000D 26F9             (PL_FM-7\SwapIPL.s):00039                         bne     copy_loop
+                      (PL_FM-7\SwapIPL.s):00040         
+                      (PL_FM-7\SwapIPL.s):00041         ; ---------------------------------------------------------------------------
+                      (PL_FM-7\SwapIPL.s):00042         ; 2. 処理を$6000に移動
+                      (PL_FM-7\SwapIPL.s):00043         ; ---------------------------------------------------------------------------
+000F 7E6012           (PL_FM-7\SwapIPL.s):00044                         jmp     MOVE_IPL+common
+0012                  (PL_FM-7\SwapIPL.s):00045         common
+                      (PL_FM-7\SwapIPL.s):00046         ; ---------------------------------------------------------------------------
+                      (PL_FM-7\SwapIPL.s):00047         ; 3. ブート選択スイッチよりモードを判定
+                      (PL_FM-7\SwapIPL.s):00048         ; ---------------------------------------------------------------------------
+0012 3408             (PL_FM-7\SwapIPL.s):00049                         pshs    dp
+0014 86FD             (PL_FM-7\SwapIPL.s):00050                         lda     #$FD
+0016 1F8B             (PL_FM-7\SwapIPL.s):00051                         tfr     a,dp
+0018 D60B             (PL_FM-7\SwapIPL.s):00052                         ldb     <BOOT_SEL_STAT
+001A C401             (PL_FM-7\SwapIPL.s):00053                         andb    #%00000001
+                      (PL_FM-7\SwapIPL.s):00054         ; ---------------------------------------------------------------------------
+                      (PL_FM-7\SwapIPL.s):00055         ; 4a. BASICモード: track0 sector4,5を$6200へ読み込む
+                      (PL_FM-7\SwapIPL.s):00056         ; 4b. DOSモード  : track0 sector6,7を$6200へ読み込む
+                      (PL_FM-7\SwapIPL.s):00057         ; ---------------------------------------------------------------------------
+001C 3404             (PL_FM-7\SwapIPL.s):00058                         pshs    b                       ; スイッチ状態をスタックに退避
+001E 58               (PL_FM-7\SwapIPL.s):00059                         lslb                            ; 2倍する
+001F CB04             (PL_FM-7\SwapIPL.s):00060                         addb    #4                      ; 4に加算 ∴セクタ4か6になる
+0021 F7608F           (PL_FM-7\SwapIPL.s):00061                         stb     RCBSCT+MOVE_IPL         ; 読み込みセクタ
+0024 8E608A           (PL_FM-7\SwapIPL.s):00062                         ldx     #RCB_DREAD+MOVE_IPL     ; XレジスタにRCBを指定する
+0027 BDFE08           (PL_FM-7\SwapIPL.s):00063                         jsr     DISK_READ               ; FDから読み込み
+                      (PL_FM-7\SwapIPL.s):00064         
+002A 7C608F           (PL_FM-7\SwapIPL.s):00065                         inc     RCBSCT+MOVE_IPL         ; 次のセクタ
+002D 7C608C           (PL_FM-7\SwapIPL.s):00066                         inc     RCBDBA+MOVE_IPL         ; バッファの上位を+1(256バイト先に)する
+0030 8E608A           (PL_FM-7\SwapIPL.s):00067                         ldx     #RCB_DREAD+MOVE_IPL     ; XレジスタにRCBを指定する
+0033 BDFE08           (PL_FM-7\SwapIPL.s):00068                         jsr     DISK_READ               ; FDから読み込み
+                      (PL_FM-7\SwapIPL.s):00069         ; ---------------------------------------------------------------------------
+                      (PL_FM-7\SwapIPL.s):00070         ; 5. $FE00-$FFFFを書込み可能 → $6200-$63FFの内容をコピー → 書込み禁止
+                      (PL_FM-7\SwapIPL.s):00071         ; ---------------------------------------------------------------------------
+0036 9693             (PL_FM-7\SwapIPL.s):00072                         lda     <MODE_SEL_REG1
+0038 8A01             (PL_FM-7\SwapIPL.s):00073                         ora     #%00000001
+003A 9793             (PL_FM-7\SwapIPL.s):00074                         sta     <MODE_SEL_REG1          ; ブートRAMを書込可
+                      (PL_FM-7\SwapIPL.s):00075         
+003C 108E6200         (PL_FM-7\SwapIPL.s):00076                         ldy     #BODY_DST
+0040 8EFE00           (PL_FM-7\SwapIPL.s):00077                         ldx     #BOOT_ENTRY
+0043                  (PL_FM-7\SwapIPL.s):00078         bios_copy
+0043 A6A0             (PL_FM-7\SwapIPL.s):00079                         lda     ,y+
+0045 A780             (PL_FM-7\SwapIPL.s):00080                         sta     ,x+
+0047 3084             (PL_FM-7\SwapIPL.s):00081                         leax    ,x                      ; Xレジスタを読んでZフラグ更新
+0049 26F8             (PL_FM-7\SwapIPL.s):00082                         bne     bios_copy               ; Xレジスタが(アドレス)$0000になるまで
+                      (PL_FM-7\SwapIPL.s):00083         
+004B 9693             (PL_FM-7\SwapIPL.s):00084                         lda     <MODE_SEL_REG1
+004D 84FE             (PL_FM-7\SwapIPL.s):00085                         anda    #%11111110
+004F 9793             (PL_FM-7\SwapIPL.s):00086                         sta     <MODE_SEL_REG1          ; ブートRAMを書込禁止
+                      (PL_FM-7\SwapIPL.s):00087         ; ---------------------------------------------------------------------------
+                      (PL_FM-7\SwapIPL.s):00088         ; 6. track0 sector8(,9)に保存したDISKのIPLを読み込み、
+                      (PL_FM-7\SwapIPL.s):00089         ;    モードに応じたアドレスに展開して実行
+                      (PL_FM-7\SwapIPL.s):00090         ; ---------------------------------------------------------------------------
+0051 8608             (PL_FM-7\SwapIPL.s):00091                         lda     #8
+0053 B7608F           (PL_FM-7\SwapIPL.s):00092                         sta     RCBSCT+MOVE_IPL         ; セクタ8指定
+0056 3504             (PL_FM-7\SwapIPL.s):00093                         puls    b                       ; モードスイッチ選択状態
+0058 C101             (PL_FM-7\SwapIPL.s):00094                         cmpb    #%00000001
+005A 2711             (PL_FM-7\SwapIPL.s):00095                         beq     dos_mode
+                      (PL_FM-7\SwapIPL.s):00096         
+005C                  (PL_FM-7\SwapIPL.s):00097         basic_mode
+005C 8E0100           (PL_FM-7\SwapIPL.s):00098                         ldx     #$0100
+005F BF608C           (PL_FM-7\SwapIPL.s):00099                         stx     RCBDBA+MOVE_IPL         ; 読み込み先 $0100
+0062 8E608A           (PL_FM-7\SwapIPL.s):00100                         ldx     #RCB_DREAD+MOVE_IPL     ; XレジスタにRCBを指定する
+0065 BDFE08           (PL_FM-7\SwapIPL.s):00101                         jsr     DISK_READ
+0068 3508             (PL_FM-7\SwapIPL.s):00102                         puls    dp
+006A 7E0100           (PL_FM-7\SwapIPL.s):00103                         jmp     $0100
+                      (PL_FM-7\SwapIPL.s):00104         
+006D                  (PL_FM-7\SwapIPL.s):00105         dos_mode
+006D 8E0300           (PL_FM-7\SwapIPL.s):00106                         ldx     #$0300
+0070 BF608C           (PL_FM-7\SwapIPL.s):00107                         stx     RCBDBA+MOVE_IPL         ; 読み込み先 $0300
+0073 8E608A           (PL_FM-7\SwapIPL.s):00108                         ldx     #RCB_DREAD+MOVE_IPL     ; XレジスタにRCBを指定する
+0076 BDFE08           (PL_FM-7\SwapIPL.s):00109                         jsr     DISK_READ
+                      (PL_FM-7\SwapIPL.s):00110         
+0079 7C608F           (PL_FM-7\SwapIPL.s):00111                         inc     RCBSCT+MOVE_IPL         ; 次のセクタにする
+007C 7C608C           (PL_FM-7\SwapIPL.s):00112                         inc     RCBDBA+MOVE_IPL         ; バッファの上位を+1(256バイト先)にする
+007F 8E608A           (PL_FM-7\SwapIPL.s):00113                         ldx     #RCB_DREAD+MOVE_IPL     ; XレジスタにRCBを指定する
+0082 BDFE08           (PL_FM-7\SwapIPL.s):00114                         jsr     DISK_READ
+0085 3508             (PL_FM-7\SwapIPL.s):00115                         puls    dp
+0087 7E0300           (PL_FM-7\SwapIPL.s):00116                         jmp     $0300
+                      (PL_FM-7\SwapIPL.s):00117         ; ---------------------------------------------------------------------------
+                      (PL_FM-7\SwapIPL.s):00118         ; RCB(DREAD)エントリー
+                      (PL_FM-7\SwapIPL.s):00119         ; ---------------------------------------------------------------------------
+     008A             (PL_FM-7\SwapIPL.s):00120         RCB_DREAD       equ     *
+008A 0A               (PL_FM-7\SwapIPL.s):00121         RQNO            fcb     10                      ; リクエスト番号(DREAD)
+008B 00               (PL_FM-7\SwapIPL.s):00122         RCBSTA          fcb     0                       ; エラーステータス
+008C 6200             (PL_FM-7\SwapIPL.s):00123         RCBDBA          fdb     BODY_DST                ; データバッファ先頭アドレス
+008E 00               (PL_FM-7\SwapIPL.s):00124         RCBTRK          fcb     0                       ; トラック番号(C)
+008F 04               (PL_FM-7\SwapIPL.s):00125         RCBSCT          fcb     4                       ; セクタ番号(R)
+0090 00               (PL_FM-7\SwapIPL.s):00126         RCBSID          fcb     0                       ; サイド番号(H)
+0091 00               (PL_FM-7\SwapIPL.s):00127         RCBUNT          fcb     0                       ; ドライブ番号
+                      (PL_FM-7\SwapIPL.s):00128         
+                      (PL_FM-7\SwapIPL.s):00129                         end     START
